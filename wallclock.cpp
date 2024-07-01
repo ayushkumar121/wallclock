@@ -84,7 +84,7 @@ template <class T> void SafeRelease(T** ppT)
     if (*ppT)
     {
         (*ppT)->Release();
-        *ppT = NULL;
+        *ppT = nullptr;
     }
 }
 
@@ -114,7 +114,7 @@ int WINAPI WinMain(
     RegisterClass(&wc);
 
     AppState* state = (AppState*)VirtualAlloc(
-        NULL,
+        nullptr,
         sizeof(state),
         MEM_COMMIT | MEM_RESERVE,
         PAGE_READWRITE
@@ -131,22 +131,22 @@ int WINAPI WinMain(
         GetSystemMetrics(SM_CXSCREEN),
         GetSystemMetrics(SM_CYSCREEN),
 
-        NULL,
-        NULL,
+        nullptr,
+        nullptr,
         hInstance,
         state
     );
 
-    if (state->hwnd == NULL)
+    if (state->hwnd == nullptr)
     {
-        OutputDebugString(L"Failed to created window");
+        OutputDebugString(L"Failed to created window\n");
         return 1;
     }
     
     ShowWindow(state->hwnd, nShowCmd);
 
     MSG msg = {0};
-    while (GetMessage(&msg, NULL, 0, 0) > 0)
+    while (GetMessage(&msg, nullptr, 0, 0) > 0)
     {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -193,7 +193,7 @@ LRESULT CALLBACK WindowProc(
         case WM_TIMER:
         {
             UpdateSleepBehaviour(state);
-            InvalidateRect(state->hwnd, NULL, FALSE);
+            InvalidateRect(state->hwnd, nullptr, FALSE);
         }
         return 0;
 
@@ -229,8 +229,8 @@ LRESULT CALLBACK WindowProc(
 void UpdateSleepBehaviour(AppState* state)
 {
     HWND hWnd = GetForegroundWindow();
-    if (hWnd) {
-        return
+    if (hWnd == nullptr) {
+        return;
     }
 
     DWORD processId;
@@ -253,7 +253,7 @@ bool CreateDeviceIndependentResources(AppState* state)
     hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &state->d2dFactory);
     if (FAILED(hr))
     {
-        OutputDebugString(L"Failed to create D2D Factory");
+        OutputDebugString(L"Failed to create D2D Factory\n");
         return true;
     }
 
@@ -264,7 +264,7 @@ bool CreateDeviceIndependentResources(AppState* state)
 
     if (FAILED(hr))
     {
-        OutputDebugString(L"Failed to create DWrite Factory");
+        OutputDebugString(L"Failed to create DWrite Factory\n");
         return true;
     }
 
@@ -272,7 +272,7 @@ bool CreateDeviceIndependentResources(AppState* state)
 
     hr = state->dwriteFactory->CreateTextFormat(
         msc_fontName,
-        NULL,
+        nullptr,
         DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL,
@@ -282,14 +282,14 @@ bool CreateDeviceIndependentResources(AppState* state)
     );
     if (FAILED(hr))
     {
-        OutputDebugString(L"Failed to create DWrite Title Text Format");
+        OutputDebugString(L"Failed to create DWrite Title Text Format\n");
         return true;
     }
     state->titleTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
 
     hr = state->dwriteFactory->CreateTextFormat(
         msc_fontName,
-        NULL,
+        nullptr,
         DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL,
@@ -300,14 +300,14 @@ bool CreateDeviceIndependentResources(AppState* state)
 
     if (FAILED(hr))
     {
-        OutputDebugString(L"Failed to create DWrite SubTitle Text Format");
+        OutputDebugString(L"Failed to create DWrite SubTitle Text Format\n");
         return true;
     }
     state->subttitleTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
 
     hr = state->dwriteFactory->CreateTextFormat(
         msc_fontName,
-        NULL,
+        nullptr,
         DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL,
@@ -335,7 +335,7 @@ void ReleaseDeviceIndependentResources(AppState* state)
 
 void ResizeWindow(AppState* state)
 {
-    if (state->renderTarget != NULL)
+    if (state->renderTarget != nullptr)
     {
         RECT rc;
         GetClientRect(state->hwnd, &rc);
@@ -343,7 +343,7 @@ void ResizeWindow(AppState* state)
         D2D1_SIZE_U size = D2D1::SizeU(rc.right, rc.bottom);
 
         state->renderTarget->Resize(size);
-        InvalidateRect(state->hwnd, NULL, FALSE);
+        InvalidateRect(state->hwnd, nullptr, FALSE);
     }
 }
 
@@ -351,7 +351,7 @@ bool CreateDeviceResources(AppState* state)
 {
     HRESULT hr;
 
-    if (state->renderTarget == NULL)
+    if (state->renderTarget == nullptr)
     {
         RECT rc;
         GetClientRect(state->hwnd, &rc);
@@ -365,7 +365,7 @@ bool CreateDeviceResources(AppState* state)
 
         if (FAILED(hr))
         {
-            OutputDebugString(L"Cannot create d2d render target");
+            OutputDebugString(L"Cannot create d2d render target\n");
             return true;
         }
 
@@ -374,7 +374,7 @@ bool CreateDeviceResources(AppState* state)
         
         if (FAILED(hr))
         {
-            OutputDebugString(L"Cannot create d2d brush");
+            OutputDebugString(L"Cannot create d2d brush\n");
             return true;
         }
     }
@@ -384,7 +384,7 @@ bool CreateDeviceResources(AppState* state)
 
 void ReleaseDeviceResources(AppState* state)
 {
-    OutputDebugStringW(L"Resources device released");
+    OutputDebugString(L"Resources device released\n");
 
     SafeRelease(&state->renderTarget);
     SafeRelease(&state->textBrush);
