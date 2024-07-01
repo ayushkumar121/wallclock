@@ -69,6 +69,7 @@ struct AppState
     IDWriteTextFormat*      bodyTextFormat;
     ID2D1SolidColorBrush*   textBrush;
     HWND                    hwnd;
+    DWORD                   processId;
 };
 
 inline AppState* GetAppState(HWND hwnd)
@@ -95,6 +96,7 @@ void ResizeWindow(AppState* state);
 bool CreateDeviceResources(AppState* state);
 void ReleaseDeviceResources(AppState* state);
 void PaintWindow(AppState* state);
+void UpdateSleepBehaviour(AppState* state);
 
 int WINAPI WinMain(
     HINSTANCE hInstance,
@@ -117,9 +119,10 @@ int WINAPI WinMain(
         MEM_COMMIT | MEM_RESERVE,
         PAGE_READWRITE
     );
+    state->processId = GetCurrentProcessId();
 
     state->hwnd = CreateWindowEx(
-        WS_EX_OVERLAPPEDWINDOW,
+        0,
         CLASS_NAME,
         WINDOW_NAME,
 
@@ -189,6 +192,7 @@ LRESULT CALLBACK WindowProc(
 
         case WM_TIMER:
         {
+            UpdateSleepBehaviour(state);
             InvalidateRect(state->hwnd, NULL, FALSE);
         }
         return 0;
@@ -220,6 +224,26 @@ LRESULT CALLBACK WindowProc(
     }
 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+void UpdateSleepBehaviour(AppState* state)
+{
+    HWND hWnd = GetForegroundWindow();
+    if (hWnd) {
+        return
+    }
+
+    DWORD processId;
+    GetWindowThreadProcessId(hWnd, &processId);
+
+    if (processId == state->processId)
+    {
+        SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED);
+    }
+    else
+    {
+        SetThreadExecutionState(ES_CONTINUOUS);
+    }
 }
 
 bool CreateDeviceIndependentResources(AppState* state)
