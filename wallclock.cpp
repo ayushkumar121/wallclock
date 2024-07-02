@@ -143,6 +143,7 @@ int WINAPI WinMain(
         return 1;
     }
     
+    ShowCursor(false);
     ShowWindow(state->hwnd, nShowCmd);
 
     MSG msg = {0};
@@ -238,7 +239,7 @@ void UpdateSleepBehaviour(AppState* state)
 
     if (processId == state->processId)
     {
-        SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED);
+        SetThreadExecutionState(ES_CONTINUOUS |  ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED);
     }
     else
     {
