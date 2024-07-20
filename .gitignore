@@ -1,5 +1,13 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
-
-/wallclock.pdb
+﻿# Ignore Visual Studio files
+.vs/
+*.obj
+*.o
+*.exe
+*.out
+*.pdb
+*.pch
+*.log
+Debug/
+Release/
+x64/
+x86/
