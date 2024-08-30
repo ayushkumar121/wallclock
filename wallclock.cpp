@@ -5,9 +5,12 @@
 #include <Windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <commdlg.h>
 
 #include <format>
 #include <string>
+#include <vector>
+#include <fstream>
 
 // Linking with libraries
 #pragma comment(lib, "user32")
@@ -61,15 +64,17 @@ const wchar_t* GetDateSuffix(int date)
 
 struct AppState 
 {
-    ID2D1Factory*           d2dFactory;
-    ID2D1HwndRenderTarget*  renderTarget;
-    IDWriteFactory*         dwriteFactory;
-    IDWriteTextFormat*      titleTextFormat;
-    IDWriteTextFormat*      subttitleTextFormat;
-    IDWriteTextFormat*      bodyTextFormat;
-    ID2D1SolidColorBrush*   textBrush;
-    HWND                    hwnd;
-    DWORD                   processId;
+    ID2D1Factory*             d2dFactory;
+    ID2D1HwndRenderTarget*    renderTarget;
+    IDWriteFactory*           dwriteFactory;
+    IDWriteTextFormat*        titleTextFormat;
+    IDWriteTextFormat*        subttitleTextFormat;
+    IDWriteTextFormat*        bodyTextFormat;
+    ID2D1SolidColorBrush*     textBrush;
+    HWND                      hwnd;
+    DWORD                     processId;
+    std::wstring              todoFile;
+    std::vector<std::wstring> todos;
 };
 
 inline AppState* GetAppState(HWND hwnd)
@@ -97,7 +102,9 @@ bool CreateDeviceResources(AppState* state);
 void ReleaseDeviceResources(AppState* state);
 void PaintWindow(AppState* state);
 void UpdateSleepBehaviour(AppState* state);
-
+void SelectTodoFile(AppState* state);
+void LoadTodos(AppState* state);
+ 
 int WINAPI WinMain(
     HINSTANCE hInstance,
     HINSTANCE hPrevInstance,
@@ -120,6 +127,9 @@ int WINAPI WinMain(
         PAGE_READWRITE
     );
     state->processId = GetCurrentProcessId();
+
+    SelectTodoFile(state);
+    LoadTodos(state);
 
     state->hwnd = CreateWindowEx(
         0,
@@ -195,6 +205,16 @@ LRESULT CALLBACK WindowProc(
         {
             UpdateSleepBehaviour(state);
             InvalidateRect(state->hwnd, nullptr, FALSE);
+        }
+        return 0;
+
+        case WM_KEYUP:
+        {
+            if (wParam == VK_F5)
+            {
+                LoadTodos(state);
+                InvalidateRect(state->hwnd, nullptr, FALSE);
+            }
         }
         return 0;
 
@@ -411,7 +431,7 @@ void PaintWindow(AppState* state)
 
         // Drawing Date & Time
         {  
-            constexpr int padding = 50;
+            static int padding = 50;
             std::wstring time = std::format(L"{:02}:{:02}", lt.wHour, lt.wMinute);
 
             IDWriteTextLayout* textLayout;
@@ -454,6 +474,40 @@ void PaintWindow(AppState* state)
             SafeRelease(&textLayout);
         }
 
+        // Drawing TODOs
+        {
+            float y = 250;
+            float x = 50;
+            static float spacing = 10;
+            for (const auto& todo : state->todos)
+            {
+                IDWriteTextLayout* textLayout;
+                state->dwriteFactory->CreateTextLayout(
+                    todo.c_str(),
+                    todo.size(),
+                    state->bodyTextFormat,
+                    renderTargetSize.width,
+                    renderTargetSize.height,
+                    &textLayout
+                );
+
+                DWRITE_TEXT_METRICS textMetrics;
+                textLayout->GetMetrics(&textMetrics);
+
+                float textHeight = textMetrics.height;
+                float textWidth = textMetrics.width;
+
+                state->renderTarget->DrawTextLayout(
+                    D2D1::Point2F(x, y),
+                    textLayout,
+                    state->textBrush
+                );
+
+                y += textHeight + spacing;
+                SafeRelease(&textLayout);
+            }
+        }
+
         HRESULT hr = state->renderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
         {
@@ -461,4 +515,53 @@ void PaintWindow(AppState* state)
         }
     }
     EndPaint(state->hwnd, &ps);
+}
+
+void SelectTodoFile(AppState* state)
+{
+    OutputDebugString(L"Selecting file\n");
+    OPENFILENAME ofn;
+    WCHAR szFile[260];
+    ZeroMemory(&ofn, sizeof(ofn));
+
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFile = szFile;
+    ofn.lpstrFile[0] = '\0';
+    ofn.nMaxFile = sizeof(szFile);
+    ofn.lpstrFilter = L"All Files\0*.*\0Text Files\0*.TXT\0";
+    ofn.nFilterIndex = 1;
+    ofn.lpstrFileTitle = NULL;
+    ofn.nMaxFileTitle = 0;
+    ofn.lpstrInitialDir = NULL;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+    if (GetOpenFileName(&ofn))
+    {
+        state->todoFile = ofn.lpstrFile;
+    }
+    else
+    {
+        MessageBox(state->hwnd, L"Failed to open file", L"Error", MB_ICONERROR);
+        ExitProcess(1);
+    }
+}
+
+void LoadTodos(AppState* state)
+{
+    state->todos.clear();
+
+    std::ifstream file(state->todoFile);
+    if (file.is_open())
+    {
+        std::string line;
+        while (std::getline(file, line))
+        {
+            state->todos.push_back(std::wstring(line.begin(), line.end()));
+        }
+    }
+    else
+    {
+        OutputDebugString(L"Failed to open todos.txt\n");
+    }
 }
