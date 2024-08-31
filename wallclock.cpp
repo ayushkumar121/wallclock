@@ -208,6 +208,11 @@ LRESULT CALLBACK WindowProc(
         }
         return 0;
 
+        case WM_ACTIVATE:
+        {
+            UpdateSleepBehaviour(state);
+        }
+
         case WM_KEYUP:
         {
             if (wParam == VK_F5)
