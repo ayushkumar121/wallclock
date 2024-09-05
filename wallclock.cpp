@@ -17,6 +17,7 @@
 #pragma comment(lib, "gdi32")
 #pragma comment(lib, "d2d1")
 #pragma comment(lib, "dwrite")
+#pragma comment(lib, "comdlg32")
 
 const wchar_t *CLASS_NAME = L"Wallclock_Window_Class";
 const wchar_t *WINDOW_NAME = L"Wallclock";
@@ -68,7 +69,16 @@ struct AppState
     IDWriteTextFormat *titleTextFormat;
     IDWriteTextFormat *subttitleTextFormat;
     IDWriteTextFormat *bodyTextFormat;
+    D2D1_COLOR_F morningTextColor;
+    D2D1_COLOR_F afternoonTextColor;
+    D2D1_COLOR_F eveningTextColor;
+    D2D1_COLOR_F nightTextColor;
     ID2D1SolidColorBrush *textBrush;
+    ID2D1GradientStopCollection *morningStops;
+    ID2D1GradientStopCollection *afternoonStops;
+    ID2D1GradientStopCollection *eveningStops;
+    ID2D1GradientStopCollection *nightStops;
+    ID2D1LinearGradientBrush *backgroundBrush;
     HWND hwnd;
     DWORD processId;
     std::wstring todoFile;
@@ -103,6 +113,7 @@ void PaintWindow(AppState *state);
 void UpdateSleepBehaviour(AppState *state);
 void SelectTodoFile(AppState *state);
 void LoadTodos(AppState *state);
+void SelectColors(AppState *state);
 
 int WINAPI WinMain(
     HINSTANCE hInstance,
@@ -198,6 +209,7 @@ LRESULT CALLBACK WindowProc(
 
     case WM_TIMER:
     {
+        SelectColors(state);
         UpdateSleepBehaviour(state);
         InvalidateRect(state->hwnd, nullptr, FALSE);
     }
@@ -394,14 +406,32 @@ bool CreateDeviceResources(AppState *state)
             return true;
         }
 
-        const D2D1_COLOR_F color = D2D1::ColorF(1.0f, 1.0f, 0);
-        state->renderTarget->CreateSolidColorBrush(color, &state->textBrush);
+        D2D1_GRADIENT_STOP morningStops[] = {
+            {0.0f, D2D1::ColorF(D2D1::ColorF::LightYellow)},
+            {1.0f, D2D1::ColorF(D2D1::ColorF::Orange)}};
+        state->morningTextColor = D2D1::ColorF(D2D1::ColorF::Black);
 
-        if (FAILED(hr))
-        {
-            OutputDebugString(L"Cannot create d2d brush\n");
-            return true;
-        }
+        D2D1_GRADIENT_STOP afternoonStops[] = {
+            {0.0f, D2D1::ColorF(D2D1::ColorF::LightBlue)},
+            {1.0f, D2D1::ColorF(D2D1::ColorF::SkyBlue)}};
+        state->afternoonTextColor = D2D1::ColorF(D2D1::ColorF::Black);
+
+        D2D1_GRADIENT_STOP eveningStops[] = {
+            {0.0f, D2D1::ColorF(D2D1::ColorF::OrangeRed)},
+            {1.0f, D2D1::ColorF(D2D1::ColorF::DarkRed)}};
+        state->eveningTextColor = D2D1::ColorF(D2D1::ColorF::White);
+
+        D2D1_GRADIENT_STOP nightStops[] = {
+            {0.0f, D2D1::ColorF(D2D1::ColorF::DarkBlue)},
+            {1.0f, D2D1::ColorF(D2D1::ColorF::Black)}};
+        state->nightTextColor = D2D1::ColorF(D2D1::ColorF::White);
+
+        state->renderTarget->CreateGradientStopCollection(morningStops, ARRAYSIZE(morningStops), &state->morningStops);
+        state->renderTarget->CreateGradientStopCollection(afternoonStops, ARRAYSIZE(afternoonStops), &state->afternoonStops);
+        state->renderTarget->CreateGradientStopCollection(eveningStops, ARRAYSIZE(eveningStops), &state->eveningStops);
+        state->renderTarget->CreateGradientStopCollection(nightStops, ARRAYSIZE(nightStops), &state->nightStops);
+
+        SelectColors(state);
     }
 
     return false;
@@ -413,6 +443,11 @@ void ReleaseDeviceResources(AppState *state)
 
     SafeRelease(&state->renderTarget);
     SafeRelease(&state->textBrush);
+    SafeRelease(&state->morningStops);
+    SafeRelease(&state->afternoonStops);
+    SafeRelease(&state->eveningStops);
+    SafeRelease(&state->nightStops);
+    SafeRelease(&state->backgroundBrush);
 }
 
 void PaintWindow(AppState *state)
@@ -428,7 +463,10 @@ void PaintWindow(AppState *state)
     {
         state->renderTarget->BeginDraw();
         state->renderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+
         D2D1_SIZE_F renderTargetSize = state->renderTarget->GetSize();
+        state->renderTarget->FillRectangle(D2D1::RectF(0, 0, renderTargetSize.width, renderTargetSize.height),
+                                           state->backgroundBrush);
 
         SYSTEMTIME lt;
         GetLocalTime(&lt);
@@ -562,5 +600,58 @@ void LoadTodos(AppState *state)
     else
     {
         OutputDebugString(L"Failed to open todos.txt\n");
+    }
+}
+
+void SelectColors(AppState *state)
+{
+    SYSTEMTIME lt;
+    GetLocalTime(&lt);
+    D2D1_SIZE_F renderTargetSize = state->renderTarget->GetSize();
+
+    int hour = lt.wHour;
+    if (hour >= 6 && hour < 12)
+    {
+        state->renderTarget->CreateLinearGradientBrush(
+            D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0, 0),
+                D2D1::Point2F(0, renderTargetSize.height)),
+            state->morningStops,
+            &state->backgroundBrush);
+
+        state->renderTarget->CreateSolidColorBrush(state->morningTextColor, &state->textBrush);
+    }
+    else if (hour >= 12 && hour < 18)
+    {
+        state->renderTarget->CreateLinearGradientBrush(
+            D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0, 0),
+                D2D1::Point2F(0, renderTargetSize.height)),
+            state->afternoonStops,
+            &state->backgroundBrush);
+        
+        state->renderTarget->CreateSolidColorBrush(state->afternoonTextColor, &state->textBrush);
+    }
+    else if (hour >= 18 && hour < 24)
+    {
+        state->renderTarget->CreateLinearGradientBrush(
+            D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0, 0),
+                D2D1::Point2F(0, renderTargetSize.height)),
+            state->eveningStops,
+            &state->backgroundBrush);
+
+        state->renderTarget->CreateSolidColorBrush(state->eveningTextColor, &state->textBrush);
+    }
+    else
+    {
+        state->renderTarget->CreateLinearGradientBrush(
+            D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0, 0),
+                D2D1::Point2F(0, renderTargetSize.height)),
+            state->nightStops,
+            &state->backgroundBrush);
+
+        state->renderTarget->CreateSolidColorBrush(state->nightTextColor, &state->textBrush);
     }
 }
