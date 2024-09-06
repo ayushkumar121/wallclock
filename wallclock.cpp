@@ -12,6 +12,8 @@
 #include <vector>
 #include <fstream>
 
+#include "resource.h"
+
 // Linking with libraries
 #pragma comment(lib, "user32")
 #pragma comment(lib, "gdi32")
@@ -121,13 +123,16 @@ int WINAPI WinMain(
     LPSTR lpCmdLine,
     int nShowCmd)
 {
-    WNDCLASSW wc = {0};
+    WNDCLASSEX wc = {0};
 
+    wc.cbSize = sizeof(WNDCLASSEX);
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
+    wc.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
 
-    RegisterClass(&wc);
+    RegisterClassEx(&wc);
 
     AppState *state = (AppState *)VirtualAlloc(
         nullptr,
@@ -159,7 +164,7 @@ int WINAPI WinMain(
         OutputDebugString(L"Failed to created window\n");
         return 1;
     }
-
+    
     ShowCursor(false);
     ShowWindow(state->hwnd, nShowCmd);
 
@@ -308,7 +313,7 @@ bool CreateDeviceIndependentResources(AppState *state)
         return true;
     }
 
-    static const WCHAR msc_fontName[] = L"Cascadia Mono";
+    static const WCHAR msc_fontName[] = L"JetBrains Mono";
 
     hr = state->dwriteFactory->CreateTextFormat(
         msc_fontName,
@@ -417,8 +422,8 @@ bool CreateDeviceResources(AppState *state)
         state->afternoonTextColor = D2D1::ColorF(D2D1::ColorF::Black);
 
         D2D1_GRADIENT_STOP eveningStops[] = {
-            {0.0f, D2D1::ColorF(D2D1::ColorF::OrangeRed)},
-            {1.0f, D2D1::ColorF(D2D1::ColorF::DarkRed)}};
+            {0.0f, D2D1::ColorF(D2D1::ColorF::DarkRed)},
+            {1.0f, D2D1::ColorF(D2D1::ColorF::Black)}};
         state->eveningTextColor = D2D1::ColorF(D2D1::ColorF::White);
 
         D2D1_GRADIENT_STOP nightStops[] = {
