@@ -241,7 +241,6 @@ LRESULT CALLBACK WindowProc(
 
         case VK_F5:
         {
-            SelectTodoFile(state);
             LoadTodos(state);
             InvalidateRect(state->hwnd, nullptr, FALSE);
         }
@@ -591,6 +590,11 @@ void SelectTodoFile(AppState *state)
 
 void LoadTodos(AppState *state)
 {
+    if (state->todoFile.empty())
+    {
+        return;
+    }
+    
     state->todos.clear();
 
     std::ifstream file(state->todoFile);
