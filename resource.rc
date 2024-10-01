@@ -1,3 +1,4 @@
 #include "resource.h"
 
 IDI_APPICON ICON "icon.ico"
+IDB_BACKGROUND_IMAGE BITMAP "wallpaper.bmp"

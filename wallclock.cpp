@@ -2,6 +2,9 @@
 #define UNICODE
 #endif
 
+#include "resource.h"
+
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -11,8 +14,6 @@
 #include <string>
 #include <vector>
 #include <fstream>
-
-#include "resource.h"
 
 // Linking with libraries
 #pragma comment(lib, "user32")
@@ -63,6 +64,14 @@ const wchar_t *GetDateSuffix(int date)
     }
 }
 
+struct Wallpaper
+{
+    int width;
+    int height;
+    uint8_t *pixels;
+    ID2D1Bitmap *bitmap;
+};
+
 struct AppState
 {
     ID2D1Factory *d2dFactory;
@@ -71,16 +80,10 @@ struct AppState
     IDWriteTextFormat *titleTextFormat;
     IDWriteTextFormat *subttitleTextFormat;
     IDWriteTextFormat *bodyTextFormat;
-    D2D1_COLOR_F morningTextColor;
-    D2D1_COLOR_F afternoonTextColor;
-    D2D1_COLOR_F eveningTextColor;
-    D2D1_COLOR_F nightTextColor;
     ID2D1SolidColorBrush *textBrush;
-    ID2D1GradientStopCollection *morningStops;
-    ID2D1GradientStopCollection *afternoonStops;
-    ID2D1GradientStopCollection *eveningStops;
-    ID2D1GradientStopCollection *nightStops;
-    ID2D1LinearGradientBrush *backgroundBrush;
+    ID2D1SolidColorBrush *backgroundBrush;
+    bool resourcesInitialised;
+    Wallpaper wallpaper;
     HWND hwnd;
     DWORD processId;
     std::wstring todoFile;
@@ -115,7 +118,6 @@ void PaintWindow(AppState *state);
 void UpdateSleepBehaviour(AppState *state);
 void SelectTodoFile(AppState *state);
 void LoadTodos(AppState *state);
-void SelectColors(AppState *state);
 
 int WINAPI WinMain(
     HINSTANCE hInstance,
@@ -164,7 +166,7 @@ int WINAPI WinMain(
         OutputDebugString(L"Failed to created window\n");
         return 1;
     }
-    
+
     ShowCursor(false);
     ShowWindow(state->hwnd, nShowCmd);
 
@@ -214,7 +216,6 @@ LRESULT CALLBACK WindowProc(
 
     case WM_TIMER:
     {
-        SelectColors(state);
         UpdateSleepBehaviour(state);
         InvalidateRect(state->hwnd, nullptr, FALSE);
     }
@@ -312,7 +313,7 @@ bool CreateDeviceIndependentResources(AppState *state)
         return true;
     }
 
-    static const WCHAR msc_fontName[] = L"JetBrains Mono";
+    static const WCHAR msc_fontName[] = L"Consolas";
 
     hr = state->dwriteFactory->CreateTextFormat(
         msc_fontName,
@@ -392,8 +393,10 @@ bool CreateDeviceResources(AppState *state)
 {
     HRESULT hr;
 
-    if (state->renderTarget == nullptr)
+    if (state->renderTarget == nullptr || !state->resourcesInitialised)
     {
+        state->resourcesInitialised = false;
+
         RECT rc;
         GetClientRect(state->hwnd, &rc);
 
@@ -410,32 +413,79 @@ bool CreateDeviceResources(AppState *state)
             return true;
         }
 
-        D2D1_GRADIENT_STOP morningStops[] = {
-            {0.0f, D2D1::ColorF(D2D1::ColorF::LightYellow)},
-            {1.0f, D2D1::ColorF(D2D1::ColorF::Orange)}};
-        state->morningTextColor = D2D1::ColorF(D2D1::ColorF::Black);
+        hr = state->renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &state->textBrush);
+        if (FAILED(hr))
+        {
+            OutputDebugString(L"Cannot text brush\n");
+            return true;
+        }
 
-        D2D1_GRADIENT_STOP afternoonStops[] = {
-            {0.0f, D2D1::ColorF(D2D1::ColorF::LightBlue)},
-            {1.0f, D2D1::ColorF(D2D1::ColorF::SkyBlue)}};
-        state->afternoonTextColor = D2D1::ColorF(D2D1::ColorF::Black);
+        hr = state->renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.5f), &state->backgroundBrush);
+        if (FAILED(hr))
+        {
+            OutputDebugString(L"Cannot background brush\n");
+            return true;
+        }
 
-        D2D1_GRADIENT_STOP eveningStops[] = {
-            {0.0f, D2D1::ColorF(D2D1::ColorF::DarkRed)},
-            {1.0f, D2D1::ColorF(D2D1::ColorF::Black)}};
-        state->eveningTextColor = D2D1::ColorF(D2D1::ColorF::White);
+        HINSTANCE hInstance = GetModuleHandle(NULL);
+        HBITMAP hBitmap = (HBITMAP)LoadImage(
+            hInstance,
+            MAKEINTRESOURCE(IDB_BACKGROUND_IMAGE),
+            IMAGE_BITMAP,
+            0, 0,
+            LR_LOADTRANSPARENT);
+        if (hBitmap == nullptr)
+        {
+            OutputDebugString(L"Cannot load wallpaper image\n");
+            return true;
+        }
 
-        D2D1_GRADIENT_STOP nightStops[] = {
-            {0.0f, D2D1::ColorF(D2D1::ColorF::DarkBlue)},
-            {1.0f, D2D1::ColorF(D2D1::ColorF::Black)}};
-        state->nightTextColor = D2D1::ColorF(D2D1::ColorF::White);
+        BITMAP bitmapInfo;
+        if (GetObject(hBitmap, sizeof(BITMAP), &bitmapInfo) == 0)
+        {
+            OutputDebugString(L"Cannot load wallpaper image info\n");
+            return true;
+        }
+        state->wallpaper.width = bitmapInfo.bmWidth;
+        state->wallpaper.height = bitmapInfo.bmHeight;
 
-        state->renderTarget->CreateGradientStopCollection(morningStops, ARRAYSIZE(morningStops), &state->morningStops);
-        state->renderTarget->CreateGradientStopCollection(afternoonStops, ARRAYSIZE(afternoonStops), &state->afternoonStops);
-        state->renderTarget->CreateGradientStopCollection(eveningStops, ARRAYSIZE(eveningStops), &state->eveningStops);
-        state->renderTarget->CreateGradientStopCollection(nightStops, ARRAYSIZE(nightStops), &state->nightStops);
+        BITMAPINFO bitmapInfoHeader = {};
+        bitmapInfoHeader.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bitmapInfoHeader.bmiHeader.biWidth = bitmapInfo.bmWidth;
+        bitmapInfoHeader.bmiHeader.biHeight = bitmapInfo.bmHeight;
+        bitmapInfoHeader.bmiHeader.biPlanes = 1;
+        bitmapInfoHeader.bmiHeader.biBitCount = 32;
+        bitmapInfoHeader.bmiHeader.biCompression = BI_RGB;
 
-        SelectColors(state);
+        state->wallpaper.pixels = new uint8_t[bitmapInfo.bmWidthBytes * bitmapInfo.bmHeight];
+        if (state->wallpaper.pixels == nullptr)
+        {
+            OutputDebugString(L"Cannot allocate memory for bitmap pixels\n");
+            DeleteObject(hBitmap);
+            return true;
+        }
+
+        GetDIBits(GetDC(NULL), hBitmap, 0, bitmapInfo.bmHeight, state->wallpaper.pixels, &bitmapInfoHeader, DIB_RGB_COLORS);
+        DeleteObject(hBitmap);
+
+        D2D1_BITMAP_PROPERTIES bitmapProperties = D2D1::BitmapProperties(
+            D2D1::PixelFormat(
+                DXGI_FORMAT_B8G8R8A8_UNORM,
+                D2D1_ALPHA_MODE_PREMULTIPLIED));
+
+        hr = state->renderTarget->CreateBitmap(
+            D2D1::SizeU(bitmapInfo.bmWidth, bitmapInfo.bmHeight),
+            state->wallpaper.pixels,
+            bitmapInfo.bmWidthBytes,
+            bitmapProperties,
+            &state->wallpaper.bitmap);
+        if (FAILED(hr))
+        {
+            OutputDebugString(L"Unable to create bitmap from image\n");
+            return true;
+        }
+
+        state->resourcesInitialised = true;
     }
 
     return false;
@@ -447,11 +497,9 @@ void ReleaseDeviceResources(AppState *state)
 
     SafeRelease(&state->renderTarget);
     SafeRelease(&state->textBrush);
-    SafeRelease(&state->morningStops);
-    SafeRelease(&state->afternoonStops);
-    SafeRelease(&state->eveningStops);
-    SafeRelease(&state->nightStops);
-    SafeRelease(&state->backgroundBrush);
+
+    SafeRelease(&state->wallpaper.bitmap);
+    delete[] state->wallpaper.pixels;
 }
 
 void PaintWindow(AppState *state)
@@ -459,7 +507,8 @@ void PaintWindow(AppState *state)
     bool failed = CreateDeviceResources(state);
     if (failed)
     {
-        return;
+        MessageBox(state->hwnd, L"Failed to create device resources", L"Error", MB_ICONERROR);
+        ExitProcess(1);
     }
 
     PAINTSTRUCT ps;
@@ -467,13 +516,51 @@ void PaintWindow(AppState *state)
     {
         state->renderTarget->BeginDraw();
         state->renderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Black));
-
         D2D1_SIZE_F renderTargetSize = state->renderTarget->GetSize();
-        state->renderTarget->FillRectangle(D2D1::RectF(0, 0, renderTargetSize.width, renderTargetSize.height),
-                                           state->backgroundBrush);
 
         SYSTEMTIME lt;
         GetLocalTime(&lt);
+
+        // Drawing Wallpaper
+        {
+            float sourceTop;
+
+            int hour = lt.wHour;
+            if (hour >= 6 && hour < 12)
+            {
+                sourceTop = 0;
+            }
+            else if (hour >= 12 && hour < 18)
+            {
+                sourceTop = state->wallpaper.height / 4;
+            }
+            else if (hour >= 18 && hour < 24)
+            {
+                sourceTop = state->wallpaper.height / 4 * 2;
+            }
+            else
+            {
+                sourceTop = state->wallpaper.height / 4 * 3;
+            }
+
+            D2D1_RECT_F destinationRect = D2D1::RectF(0.0f, 0.0f, renderTargetSize.width, renderTargetSize.height);
+            D2D1_RECT_F sourceRect = D2D1::RectF(
+                0.0f,
+                sourceTop,
+                state->wallpaper.width,
+                sourceTop + state->wallpaper.height/4);
+
+            state->renderTarget->DrawBitmap(
+                state->wallpaper.bitmap,
+                destinationRect,
+                1.0f,
+                D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                sourceRect);
+
+            state->renderTarget->FillRectangle(
+                destinationRect,
+                state->backgroundBrush);
+        }
 
         // Drawing Date & Time
         {
@@ -594,7 +681,7 @@ void LoadTodos(AppState *state)
     {
         return;
     }
-    
+
     state->todos.clear();
 
     std::ifstream file(state->todoFile);
@@ -609,58 +696,5 @@ void LoadTodos(AppState *state)
     else
     {
         OutputDebugString(L"Failed to open todos.txt\n");
-    }
-}
-
-void SelectColors(AppState *state)
-{
-    SYSTEMTIME lt;
-    GetLocalTime(&lt);
-    D2D1_SIZE_F renderTargetSize = state->renderTarget->GetSize();
-
-    int hour = lt.wHour;
-    if (hour >= 6 && hour < 12)
-    {
-        state->renderTarget->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(
-                D2D1::Point2F(0, 0),
-                D2D1::Point2F(0, renderTargetSize.height)),
-            state->morningStops,
-            &state->backgroundBrush);
-
-        state->renderTarget->CreateSolidColorBrush(state->morningTextColor, &state->textBrush);
-    }
-    else if (hour >= 12 && hour < 18)
-    {
-        state->renderTarget->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(
-                D2D1::Point2F(0, 0),
-                D2D1::Point2F(0, renderTargetSize.height)),
-            state->afternoonStops,
-            &state->backgroundBrush);
-        
-        state->renderTarget->CreateSolidColorBrush(state->afternoonTextColor, &state->textBrush);
-    }
-    else if (hour >= 18 && hour < 24)
-    {
-        state->renderTarget->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(
-                D2D1::Point2F(0, 0),
-                D2D1::Point2F(0, renderTargetSize.height)),
-            state->eveningStops,
-            &state->backgroundBrush);
-
-        state->renderTarget->CreateSolidColorBrush(state->eveningTextColor, &state->textBrush);
-    }
-    else
-    {
-        state->renderTarget->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(
-                D2D1::Point2F(0, 0),
-                D2D1::Point2F(0, renderTargetSize.height)),
-            state->nightStops,
-            &state->backgroundBrush);
-
-        state->renderTarget->CreateSolidColorBrush(state->nightTextColor, &state->textBrush);
     }
 }
